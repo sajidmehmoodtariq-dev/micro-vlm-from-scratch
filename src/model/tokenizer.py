@@ -20,12 +20,21 @@ class ByteTokenizer:
         self.vocab_size = self.VOCAB_SIZE
 
     def encode(self, text: str, add_bos: bool = True, add_eos: bool = False) -> List[int]:
-        """Converts raw string to UTF-8 byte integers."""
-        raw_bytes = list(text.encode("utf-8"))
+        """Converts raw string to UTF-8 byte integers while preserving special token IDs."""
         tokens = []
         if add_bos:
             tokens.append(self.BOS_TOKEN_ID)
-        tokens.extend(raw_bytes)
+
+        if "<IMG>" in text:
+            parts = text.split("<IMG>")
+            for i, part in enumerate(parts):
+                if part:
+                    tokens.extend(list(part.encode("utf-8")))
+                if i < len(parts) - 1:
+                    tokens.append(self.IMG_TOKEN_ID)
+        else:
+            tokens.extend(list(text.encode("utf-8")))
+
         if add_eos:
             tokens.append(self.EOS_TOKEN_ID)
         return tokens

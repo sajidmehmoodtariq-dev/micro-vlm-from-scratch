@@ -48,11 +48,12 @@ class SyntheticReasoningDataset(Dataset):
         return f"Logic: {a} {op} {b} -> {res}"
 
     def _generate_arithmetic(self) -> str:
-        a = random.randint(0, 50)
-        b = random.randint(1, 50)
-        op = random.choice(["+", "-", "*"])
-        res = eval(f"{a} {op} {b}")
-        return f"Calc: {a} {op} {b} = {res}"
+        a = random.randint(10, 80)
+        b = random.randint(10, 80)
+        ans = a + b
+        t_sum = (a // 10) * 10 + (b // 10) * 10
+        u_sum = (a % 10) + (b % 10)
+        return f"Calc: {a} + {b} = [{t_sum}+{u_sum}] = {ans}."
 
     def _generate_multimodal_sample(self) -> Tuple[str, torch.Tensor]:
         """Creates a synthetic 64x64 color patch with a grounded text description."""

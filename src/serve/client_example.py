@@ -60,12 +60,12 @@ class MicroVLMClient:
         self, 
         prompt: str, 
         pixel_values: Optional[torch.Tensor] = None, 
-        max_new_tokens: int = 24, 
-        temperature: float = 0.3
+        max_new_tokens: int = 8, 
+        temperature: float = 0.0
     ) -> str:
         """
-        Runs autoregressive inference on prompt + optional image.
-        Returns generated string response.
+        Runs greedy (temperature=0.0) or sampled inference on prompt + optional image.
+        Default max_new_tokens is 8 tokens (sufficient for words, logic states, and color labels).
         """
         start_t = time.perf_counter()
         
@@ -82,7 +82,7 @@ class MicroVLMClient:
                 pixel_values=pixel_values,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
-                top_k=10
+                top_k=1
             )
 
         # Slice out only the generated tokens
@@ -91,45 +91,61 @@ class MicroVLMClient:
         completion = self.tokenizer.decode(generated_tokens)
         elapsed_ms = (time.perf_counter() - start_t) * 1000
 
-        return completion.strip(), round(elapsed_ms, 2)
+        # Post-clean: take first line, stop at terminal period, and strip prompt delimiters if any
+        cleaned = completion.strip().split("\n")[0].strip()
+        if "->" in cleaned:
+            cleaned = cleaned.replace("->", "").strip()
+        if "." in cleaned:
+            cleaned = cleaned.split(".")[0].strip() + "."
+
+        return cleaned, round(elapsed_ms, 2)
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Micro-VLM Inference Client")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint .pt file (default: auto-detect)")
+    args = parser.parse_args()
+
     print("=" * 60)
     print("      MICRO-VLM STANDALONE INFERENCE CLIENT")
+    print("      Mode: Greedy Decoding (T=0.0, Capped Tokens)")
     print("=" * 60)
 
-    client = MicroVLMClient()
+    client = MicroVLMClient(checkpoint_path=args.checkpoint)
 
-    # 1. Text Reasoning Example
-    test_prompts = [
+    # 1. Text Reasoning Demos (Greedy T=0.0, capped at 8 tokens)
+    print("\n--- 1. Text Reasoning Demos ---")
+    logic_prompts = [
         "Eval: True and not False -> ",
         "Eval: not (False or False) -> ",
-        "Calc: 15 + 27 = ",
     ]
-
-    print("\n--- 1. Text Reasoning Demos ---")
-    for prompt in test_prompts:
-        completion, latency_ms = client.generate(prompt, max_new_tokens=16, temperature=0.1)
+    for prompt in logic_prompts:
+        completion, latency_ms = client.generate(prompt, max_new_tokens=8, temperature=0.0)
         print(f"Prompt   : {prompt}")
         print(f"Response : {completion}")
         print(f"Latency  : {latency_ms} ms\n")
 
-    # 2. Multimodal Example (Synthetic Color Image)
+    # 2. Arithmetic Demo (allows up to 16 tokens for scratchpad: [t_sum+u_sum] = ans.)
+    math_prompt = "Calc: 15 + 27 = "
+    completion, latency_ms = client.generate(math_prompt, max_new_tokens=16, temperature=0.0)
+    print(f"Prompt   : {math_prompt}")
+    print(f"Response : {completion}")
+    print(f"Latency  : {latency_ms} ms\n")
+
+    # 3. Multimodal Example (Synthetic Green Canvas, capped at 8 tokens)
     print("--- 2. Multimodal Vision Demo ---")
-    # Synthetic 64x64 green canvas
     green_image = torch.zeros(1, 3, 64, 64, dtype=torch.float32)
     green_image[0, 1, :, :] = 1.0  # Green channel
 
-    # 16 <IMG> placeholder tokens matching downsampler: (64/8)^2 / 4 = 16
     img_slots = "<IMG>" * 16
     mm_prompt = f"Visual {img_slots} Question: Primary tint? Answer: "
     
     completion, latency_ms = client.generate(
         mm_prompt, 
         pixel_values=green_image, 
-        max_new_tokens=10, 
-        temperature=0.1
+        max_new_tokens=8, 
+        temperature=0.0
     )
     print(f"Prompt   : Visual [64x64 Green Canvas] Question: Primary tint? Answer:")
     print(f"Response : {completion}")
